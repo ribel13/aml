@@ -58,11 +58,6 @@ error_msg() {
     exit 1
 }
 
-mkdir -p ${BUILD_DIR}/files/etc/config
-mkdir -p ${BUILD_DIR}/files/usr/bin
-mkdir -p ${BUILD_DIR}/files/etc/init.d
-}
-
 # 1. KONFIGURASI NETWORK (Auto-Modem USB)
 cat <<EOF > files/etc/config/network
 config interface 'loopback'
