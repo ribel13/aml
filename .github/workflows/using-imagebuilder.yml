@@ -155,9 +155,10 @@ jobs:
           #echo "status=success" >> ${GITHUB_OUTPUT}
 
       - name: Build Firmware Images
-        id: build
+        id: imagebuilder
         if: steps.customize.outputs.status == 'success'
         run: |
+          RELEASES_BRANCH="${{ inputs.releases_branch }}"
           cd ${{ env.WORKING_DIR }}
           mkdir -p compiled_images
           chmod +x IMAGEBUILDER_SH
@@ -180,8 +181,8 @@ jobs:
           echo "status=success" >> "$GITHUB_OUTPUT"
 
       - name: Upload OpenWrt to Release
-        #uses: ncipollo/release-action@main
-        uses: softprops/action-gh-release@master
+        uses: ncipollo/release-action@main
+        #uses: softprops/action-gh-release@master
         if: ${{ steps.imagebuilder.outputs.status == 'success' && !cancelled() }}
         with:
           tag: ${{ env.build_tag }}
