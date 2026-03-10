@@ -58,6 +58,65 @@ error_msg() {
     exit 1
 }
 
+mkdir -p ${BUILD_DIR}/files/etc/config
+mkdir -p ${BUILD_DIR}/files/usr/bin
+mkdir -p ${BUILD_DIR}/files/etc/init.d
+}
+
+# 1. KONFIGURASI NETWORK (Auto-Modem USB)
+cat <<EOF > files/etc/config/network
+config interface 'loopback'
+	option ifname 'lo'
+	option proto 'static'
+	option ipaddr '127.0.0.1'
+	option netmask '255.0.0.0'
+
+config interface 'lan'
+	option type 'bridge'
+	option ifname 'eth0'
+	option proto 'static'
+	option ipaddr '192.168.1.1'
+	option netmask '255.255.255.0'
+
+config interface 'wan_usb'
+	option ifname 'usb0'
+	option proto 'dhcp'
+	option metric '10'
+EOF
+
+# 2. KONFIGURASI MWAN3 (Anti-Loss / Auto-Reconnect)
+# Menjaga koneksi tetap aktif jika IP berubah atau koneksi timeout
+cat <<EOF > files/etc/config/mwan3
+config interface 'wan_usb'
+	option enabled '1'
+	list track_ip '8.8.8.8'
+	list track_ip '1.1.1.1'
+	option reliability '1'
+	option count '1'
+	option timeout '2'
+	option interval '5'
+	option down '3'
+	option up '2'
+EOF
+
+# 3. SKRIP PINGER (Keep-Alive)
+cat <<EOF > files/usr/bin/pinger.sh
+#!/bin/sh
+# Ping ringan tiap 10 detik agar jalur modem tidak 'idle'
+while true; do
+    ping -c 1 8.8.8.8 > /dev/null 2>&1
+    sleep 10
+done
+EOF
+chmod +x files/usr/bin/pinger.sh
+
+# Jalankan pinger saat booting via rc.local
+cat <<EOF > files/etc/rc.local
+/usr/bin/pinger.sh &
+exit 0
+EOF
+}
+
 # Downloading OpenWrt ImageBuilder
 download_imagebuilder() {
     cd ${make_path}
@@ -75,6 +134,7 @@ download_imagebuilder() {
     sync && sleep 3
     echo -e "${INFO} [ ${make_path} ] directory status: $(ls -al 2>/dev/null)"
 }
+
 
 # Adjust related files in the ImageBuilder directory
 adjust_settings() {
