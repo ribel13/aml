@@ -84,7 +84,7 @@ on:
 
 env:
   TZ: Etc/UTC
-  IMAGEBUILDER_SH: config/imagebuilder/25.sh
+  IMAGEBUILDER_SH: config/imagebuilder/frdmx.sh
 
 jobs:
   build:
