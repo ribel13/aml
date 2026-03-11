@@ -84,7 +84,7 @@ on:
 
 env:
   TZ: Etc/UTC
-  IMAGEBUILDER_SH: config/imagebuilder/frdmx.sh
+  IMAGEBUILDER_SH: .config/frdmx.sh
 
 jobs:
   build:
@@ -146,7 +146,6 @@ jobs:
         if: ${{ steps.init.outputs.status == 'success' && !cancelled() }}
         run: |
           RELEASES_BRANCH="${{ inputs.releases_branch }}"
-          cd ${{ env.WORKING_DIR }}
           mkdir -p compiled_images
           chmod +x ${IMAGEBUILDER_SH}
           ${IMAGEBUILDER_SH} ${RELEASES_BRANCH}
