@@ -140,13 +140,13 @@ jobs:
           df -Th
           echo "status=success" >> ${GITHUB_OUTPUT}
 
-      - name: Build OpenWrt Rootfs [ ${{ inputs.releases_branch }} ]
-        id: imagebuilder
-        #id: build
+      - name: Build OpenWrt Rootfs
+        #[ ${{ inputs.releases_branch }} ]
+        #id: imagebuilder
+        id: build
         if: ${{ steps.init.outputs.status == 'success' && !cancelled() }}
         run: |
           RELEASES_BRANCH="${{ inputs.releases_branch }}"
-          mkdir -p compiled_images
           chmod +x ${IMAGEBUILDER_SH}
           ${IMAGEBUILDER_SH} ${RELEASES_BRANCH}
           echo "build_tag=Openwrt_imagebuilder_${RELEASES_BRANCH/:/_}_$(date +"%Y.%m")" >> ${GITHUB_ENV}
