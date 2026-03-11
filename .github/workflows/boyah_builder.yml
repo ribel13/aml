@@ -1,4 +1,4 @@
-name: Ai Builder
+name: Boyah Builder
 
 on:
   repository_dispatch:
