@@ -95,6 +95,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          name: ${{ env.build_tag }}
+          path: /builder/openwrt/bin/targets/*
 
       - name: Initialization environment
         id: init
@@ -137,7 +140,8 @@ jobs:
           sudo mkfs.xfs -f -i sparse=0 -b size=4096 /dev/github/runner
           sudo mkdir -p /builder
           sudo mount /dev/github/runner /builder
-          sudo chown -R runner:runner /builder
+          ##sudo chown -R runner:runner /builder
+          sudo chown -R runner:docker /builder/openwrt/bin/targets/
           df -Th
           echo "status=success" >> ${GITHUB_OUTPUT}
 
@@ -172,7 +176,7 @@ jobs:
           echo "build_tag=Openwrt_imagebuilder_${RELEASES_BRANCH/:/_}_$(date +"%Y.%m")" >> ${GITHUB_ENV}
           
           # Membuat symbolic link untuk akses file builder
-          [[ -d "/builder/openwrt" ]] || sudo mkdir -p /builder/openwrt
+          [[ -d "/builder/openwrt" ]] || sudo mkdir -p /builder/openwrt/**
           sudo ln -sf /builder/openwrt ${{ github.workspace }}/openwrt_build
           
           df -hT ${PWD}
