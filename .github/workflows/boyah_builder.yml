@@ -144,7 +144,7 @@ jobs:
             make clean
           fi
             
-          time ./make-image25.sh ${{ env.PROFILE }} ${{ env.TUNNEL }}
+          time ./frdmx.sh ${{ env.PROFILE }} ${{ env.TUNNEL }}
             
           for file in bin/targets/"${{ env.TARGET_SYSTEM }}"/*-rootfs.tar.gz; do
             if [ -f "$file" ]; then
