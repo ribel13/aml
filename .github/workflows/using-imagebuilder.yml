@@ -152,7 +152,7 @@ jobs:
             make clean
           fi
             
-          time ./frdmx.sh ${{ env.PROFILE }} ${{ env.TUNNEL }}
+          time ./frdmx.sh ${{ env.PROFILE }}
             
           for file in bin/targets/"${{ env.TARGET_SYSTEM }}"/*-rootfs.tar.gz; do
             if [ -f "$file" ]; then
@@ -176,7 +176,7 @@ jobs:
           removeArtifacts: false
           replacesArtifacts: true
           makeLatest: true
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.AKSI_TOKEN }}
 
       - name: Packaging OpenWrt
         if: ${{ steps.imagebuilder.outputs.status == 'success' && !cancelled() }}
@@ -206,5 +206,5 @@ jobs:
           body: |
             ### OpenWrt Image information
             - Default IP: `192.168.1.1`
-            - Default username: `root`
+            - Default username: `frdmx`
             - Default password: `root`
