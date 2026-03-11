@@ -140,16 +140,19 @@ jobs:
           df -Th
           echo "status=success" >> ${GITHUB_OUTPUT}
 
-      - name: Compile the firmware
-        id: compile
+      - name: Build OpenWrt Rootfs [ ${{ inputs.releases_branch }} ]
+        id: imagebuilder
+        if: ${{ steps.init.outputs.status == 'success' && !cancelled() }}
         run: |
-          cd openwrt
-          echo -e "$(nproc) thread compile"
-          make -j$(nproc) || make -j8 || make -j8 V=s
-          echo "status=success" >> $GITHUB_OUTPUT
-          grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
-          [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
-          echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+          RELEASES_BRANCH="${{ inputs.releases_branch }}"
+          chmod +x ${IMAGEBUILDER_SH}
+          ${IMAGEBUILDER_SH} ${RELEASES_BRANCH}
+          echo "build_tag=OpenWrt_imagebuilder_${RELEASES_BRANCH/:/_}_$(date +"%Y.%m")" >> ${GITHUB_ENV}
+          # Add symbolic link
+          [[ -d "/builder/openwrt" ]] || mkdir -p /builder/openwrt
+          ln -sf /builder/openwrt /home/runner/work/_actions/ribel13/amlogic-s9xxx-openwrt/main/openwrt
+          df -hT ${PWD}
+          echo "status=success" >> ${GITHUB_OUTPUT}
         
       - name: Upload OpenWrt to Release
         #uses: ncipollo/release-action@main
