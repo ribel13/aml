@@ -51,7 +51,6 @@ on:
         default: "ribel13/kernel"
         type: choice
         options:
-          - ophub/kernel
           - ribel13/kernel
       kernel_usage:
         description: "Set the tags of the stable kernel."
@@ -70,8 +69,6 @@ on:
         default: "FRDMX"
         type: choice
         options:
-          - ophub
-          - angel
           - FRDMX
 
 env:
@@ -132,178 +129,90 @@ jobs:
           df -Th
           echo "status=success" >> ${GITHUB_OUTPUT}
 
-      - name: Build Firmware Images
-        id: build
-        if: steps.customize.outputs.status == 'success'
-        run: |
-          cd ${{ env.WORKING_DIR }}
-          mkdir -p compiled_images
-          chmod +x frdmx.sh
+       - name: Clone source code
+         working-directory: /workdir
+         run: |
+           df -hT $PWD
+           git clone $REPO_URL -b $REPO_BRANCH openwrt
+           ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
-          if [ "${{ env.CLEAN }}" == "true" ]; then
-            make clean
-          fi
-            
-          time ./frdmx.sh ${{ env.PROFILE }} ${{ env.TUNNEL }}
-            
-          for file in bin/targets/"${{ env.TARGET_SYSTEM }}"/*-rootfs.tar.gz; do
-            if [ -f "$file" ]; then
-              new_name="FRDMX_$(basename "$file" -rootfs.tar.gz)_${{ env.TUNNEL }}-rootfs.tar.gz"
-              mv "$file" compiled_images/$new_name
-            fi
-          done
+       - name: Download package
+         id: package
+         run: |
+           cd openwrt
+           make defconfig
+           make download -j8
+           find dl -size -512c -exec ls -l {} \;
+           find dl -size -512c -exec rm -f {} \;
 
-          echo "Images built successfully:"
-          ls -la compiled_images/
-          echo "status=success" >> "$GITHUB_OUTPUT"
-      
-  download:
-    name: Download Rootfs
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download Rootfs
+      - name: Compile the firmware
+        id: compile
         run: |
-          wget "${{ github.event.inputs.rootfs_url }}"
-          ROOTFS_PATH=$(find ./ -name "*rootfs.tar.gz")
-          echo "ROOTFS_PATH=$ROOTFS_PATH" >> $GITHUB_ENV
-          
-      - name: Upload Rootfs
-        uses: actions/upload-artifact@v4
+          cd openwrt
+          echo -e "$(nproc) thread compile"
+          make -j$(nproc) || make -j8 || make -j8 V=s
+          echo "status=success" >> $GITHUB_OUTPUT
+          grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
+          [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
+          echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+
+      - name: Check space usage
+        if: (!cancelled())
+        run: df -hT
+
+      - name: Upload bin directory
+        uses: actions/upload-artifact@main
+        if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
         with:
-          name: amlogic-rootfs
-          path: |
-            ${{ env.ROOTFS_PATH }}
+          name: OpenWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+          path: openwrt/bin
 
-  build_specific:
-    name: Build ${{ github.event.inputs.board_version }}
-    runs-on: ubuntu-22.04
-    needs: download
-    if: github.event.inputs.board_version != 'all'
-    steps:
-      - name: Clone Amlogic Builder
+      - name: Organize files
+        id: organize
+        if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
         run: |
-          if [ -d "amlogic-s9xxx-openwrt" ]; then
-            rm -rf amlogic-s9xxx-openwrt
-          fi
-          git clone --depth 1 https://github.com/ribel13/aml.git
-          mkdir -p amlogic-s9xxx-openwrt/openwrt-armsr
-    
-      - name: Download Rootfs
-        uses: actions/download-artifact@v4
+          cd openwrt/bin/targets/*/*
+          rm -rf packages
+          echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+          echo "status=success" >> $GITHUB_OUTPUT
+
+      - name: Upload firmware directory
+        uses: actions/upload-artifact@main
+        if: steps.organize.outputs.status == 'success' && !cancelled()
         with:
-          name: amlogic-rootfs
-          path: ./amlogic-s9xxx-openwrt/openwrt-armsr/
-          # path: ./Action_ImmortalWrt/releases/download/2026.03.06-0017/openwrt-armsr
-          
-      - name: Build Firmware ${{ github.event.inputs.board_version }} with Kernel ${{ github.event.inputs.kernel_version }}
-        run: |
-          cd amlogic-s9xxx-openwrt
-          sudo ./remake -b ${{ github.event.inputs.board_version }} -k ${{ github.event.inputs.kernel_version }} -s ${{ github.event.inputs.rootfs_size }}
-      
-      - name: Find Firmware
-        run: |
-          FILE_PATH=$(find ./amlogic-s9xxx-openwrt/openwrt/out/ -name "*.img.gz")
-          if [[ -z "$FILE_PATH" ]]; then
-            echo "Error: Tidak ada file firmware ditemukan!"
-            exit 1
-          fi
-          echo "FILE_PATH=$FILE_PATH" >> $GITHUB_ENV
+          name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+          path: ${{ env.FIRMWARE }}
 
-      - name: Set up date
-        id: set_date
+      - name: Generate release tag
+        id: tag
+        if: env.UPLOAD_RELEASE == 'true' && !cancelled()
         run: |
-          export TZ='Asia/Jakarta'
-          echo "date_time=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
-          
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
+          echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
+          touch release.txt
+          [ ${UPLOAD_GOFILE} = true && ${{ steps.gofile.outputs.url }} ] && echo "🔗 [GoFile](${{ steps.gofile.outputs.url }})" >> release.txt
+          echo "status=success" >> $GITHUB_OUTPUT
+
+      - name: Upload firmware to release
+        uses: softprops/action-gh-release@master
+        if: steps.tag.outputs.status == 'success' && !cancelled()
         env:
-          GITHUB_TOKEN: ${{ secrets.AKSI_GITHUB }}
+          GITHUB_TOKEN: ${{ secrets.AKSI_TOKEN }}
         with:
-          name: FRDMX-Wrt ${{ github.event.inputs.openwrt_ver }}
-          tag_name: v${{ github.event.inputs.openwrt_ver }}_k${{ github.event.inputs.kernel_version }}
-          draft: false
-          prerelease: false
-          files: |
-                ${{ env.FILE_PATH }}
-          body: |
-            ### Information
-            * Default IP: 192.168.1.1
-            * Default username: frdmx
-
-  build_all:
-    name: Build All
-    runs-on: ubuntu-22.04
-    needs: download
-    if: github.event.inputs.board_version == 'all'
-    strategy:
-      matrix:
-        board_version: 
-          - h96-max-m2
-          - nanopi-r5c
-          - nanopi-r5s
-          - orangepi-5-plus
-          - rk3318-box
-          - s905-beelink-mini
-          - s905-mxqpro-plus
-          - s905l-b860av21u
-          - s905w
-          - s905x2
-          - s905x3
-          - s905x3-h96max
-          - s905x3-x96max
-          - s912
-          - s912-nexbox-a1
-          - s912-nexbox-a2
-          - s922x
-          - tanix-tx6
-    steps:
-      - name: Clone Amlogic Builder
-        run: |
-          if [ -d "amlogic-s9xxx-openwrt" ]; then
-            rm -rf amlogic-s9xxx-openwrt
-          fi
-          git clone --depth 1 https://github.com/ribel13/aml.git
-          mkdir -p amlogic-s9xxx-openwrt/openwrt-armsr
-    
-      - name: Download Rootfs
-        uses: actions/download-artifact@v4
+          tag_name: ${{ steps.tag.outputs.release_tag }}
+          body_path: release.txt
+          files: ${{ env.FIRMWARE }}/*
+ 
+      - name: Delete workflow runs
+        uses: Mattraks/delete-workflow-runs@main
         with:
-          name: amlogic-rootfs
-          path: ./amlogic-s9xxx-openwrt/openwrt-armsr/
-          
-      - name: Build Firmware ${{ matrix.board_version }} with Kernel ${{ github.event.inputs.kernel_version }}
-        run: |
-          cd amlogic-s9xxx-openwrt/
-          sudo ./remake -b ${{ matrix.board_version }} -k ${{ github.event.inputs.kernel_version }} -s ${{ github.event.inputs.rootfs_size }}
-      
-      - name: Find Firmware
-        run: |
-          FILE_PATH=$(find ./amlogic-s9xxx-openwrt/openwrt/out/ -name "*.img.gz")
-          if [[ -z "$FILE_PATH" ]]; then
-            echo "Error: Tidak ada file firmware ditemukan!"
-            exit 1
-          fi
-          echo "FILE_PATH=$FILE_PATH" >> $GITHUB_ENV
+          retain_days: 0
+          keep_minimum_runs: 2
 
-      - name: Set up date
-        id: set_date
-        run: |
-          export TZ='Asia/Jakarta'
-          echo "date_time=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
-          
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
+      - name: Remove old Releases
+        uses: dev-drprasad/delete-older-releases@master
+        if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+        with:
+          keep_latest: 3
+          delete_tags: true
         env:
-          GITHUB_TOKEN: ${{ secrets.AKSI_GITHUB }}
-        with:
-          name: FRDM-Wrt ${{ github.event.inputs.openwrt_ver }}
-          tag_name: v${{ github.event.inputs.openwrt_ver }}_k${{ github.event.inputs.kernel_version }}
-          draft: false
-          prerelease: false
-          files: |
-                ${{ env.FILE_PATH }}
-          body: |
-            ### FRDMX-Wrt Information
-            * Default IP: 192.168.1.1
-            * Default username: frdmx
+          GITHUB_TOKEN: ${{ secrets.AKSI_TOKEN }}
