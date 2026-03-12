@@ -95,9 +95,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          name: ${{ env.build_tag }}
-          path: /builder/openwrt/bin/targets/*
 
       - name: Initialization environment
         id: init
@@ -139,8 +136,8 @@ jobs:
           sudo lvcreate -n runner -l 100%FREE github
           sudo mkfs.xfs -f -i sparse=0 -b size=4096 /dev/github/runner
           sudo mkdir -p /builder
-          ##sudo mount /dev/github/runner /builder
-          sudo chown -R runner:runner /builder
+          sudo mount /dev/github/runner /builder
+          ##sudo chown -R runner:runner /builder
           sudo chown -R runner:docker /builder/openwrt/bin/targets/
           df -Th
           echo "status=success" >> ${GITHUB_OUTPUT}
